@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #map {
+            height: 100%;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            position: relative;
+            overflow: hidden;
+        }
+        #map-title {
+            position: absolute;
+            top: 20px; /* Adjust the distance from the top as needed */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99;
+            font-size: 24px;
+            color: #333;
+        }
+        #button-container {
+            position: absolute;
+            top: 60px; /* Adjust the top position as needed */
+            right: 10px; /* Adjust the right position as needed */
+            z-index: 99;
+        }
+        .logo {
+            position: absolute;
+            top: 10px; /* Adjust the distance from the top as needed */
+            left: 40%;
+            transform: translateX(-75%);
+            z-index: 50;
+            width: 60px;
+            height: auto;
+            color: #333;
+        }
+        .button {
+            margin: 4px 2px;
+            cursor: pointer;
+            background-color: #443fc8; 
+            border: none;
+            color: white;
+            border: 0.16em solid rgba(255, 255, 255, 0);
+            border-radius: 0.5em;
+            box-sizing: border-box;
+            padding: 12px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            -webkit-transition-duration: 0.4s;
+            transition-duration: 0.4s;
+        }
+        .button-name {
+            position: absolute;
+            font-size: 14px;
+            color: white;
+            /*background-color: #443fc8;*/
+            padding: 4px 8px;
+            border-radius: 4px;
+            pointer-events: none;
+            white-space: nowrap;
+            top: calc(100% + 10px); 
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .button {
+            /* ... */
+            background-color: #000; /* black */
+        }
+
+        .button.button-2 {
+            background-color: #f00; /* red */
+        }
+
+        .button.button-3 {
+            background-color: #800080; /* purple */
+        }
+
+        .button.button-4 {
+            background-color: #008000; /* green */
+        }
+    </style>
+</head>
+
+<body>
+    <h1 id="map-title">Firebase based website</h1>
+    <!-- Add your logo image here -->
+    <img class="logo" src="img.png" alt="Logo">
+
+    <div id="button-container">
+        <button class='button button-1' name='button1' type="button" onclick="toggleButton(1)">BTN 1</button>
+        <button class="button button-2" name='button2' type="button" onclick="toggleButton(2)">BTN 2</button>
+        <button class="button button-3" name='button3' type="button" onclick="toggleButton(3)">BTN 3</button>
+        <button class="button button-4" name='button4' type="button" onclick="toggleButton(4)">BTN 4</button>
+    </div>
+
+    <div id="map"></div>
+    <div id="distance-info"style="position: absolute; top: 120px; left: 10px; background-color: rgba(255, 255, 255, 0.8); padding: 10px;"></div>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/7.5.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.5.0/firebase-database.js"></script>
+
+    <script>
+        // Your web app's Firebase configuration (add your data below)
+        var firebaseConfig = {
+            apiKey: " ",
+            authDomain: "  ",
+            databaseURL: "  ",
+            projectId: "  ",
+            storageBucket: "  ",
+            messagingSenderId: "  ",
+            appId: "  ",
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        var prevLat = 0;
+        var prevLon = 0;
+
+        var count = 0;
+        var obj_detected = true;
+        var selectedBtn = null;
+
+        var markers = [];
+        var mymap;
+
+        var totalDistanceToButton2 = 0;
+        var totalDistanceToButton3 = 0;
+        var totalDistanceToButton4 = 0;
+
+        var button1Position = null;
+        var button2Position = null;
+        var button3Position = null;
+        var button4Position = null;
+
+        function toggleButton(btnNumber) {
+            selectedBtn = btnNumber;
+            obj_detected = !obj_detected;
+            markers = [];
+            count = 0;
+            document.getElementById('distance-info').innerHTML = '';
+            updateDistanceInfo();
+
+            const buttonElement = document.querySelector(`button[name="button${btnNumber}"]`);
+            if (!obj_detected && buttonElement) {
+                buttonElement.style.backgroundColor = '#443fc8';
+            } else if (buttonElement) {
+                const lineColor = ['black', 'red', 'purple', 'green'][btnNumber - 1];
+                buttonElement.style.backgroundColor = lineColor;
+            }
+
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const earthRadius = 6371; // Radius of the Earth in kilometers
+            const dLat = degreesToRadians(lat2 - lat1);
+            const dLon = degreesToRadians(lon2 - lon1);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(degreesToRadians(lat1)) * Math.cos(degreesToRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = earthRadius * c;
+            return distance;
+        }
+
+        function update_firebase(lat, lon) {
+            count++;
+            if (selectedBtn !== null) {
+                var marker = new google.maps.Marker({
+                    position: { lat: lat, lng: lon },
+                    map: mymap,
+                    title: `Button ${selectedBtn} Marker ${count}`
+                });
+
+                markers.push(marker);
+
+                // Save the position of each button when it is created
+                if (selectedBtn === 1 && button1Position === null) {
+                    button1Position = { lat: lat, lng: lon };
+                } else if (selectedBtn === 2 && button2Position === null) {
+                    button2Position = { lat: lat, lng: lon };
+                } else if (selectedBtn === 3 && button3Position === null) {
+                    button3Position = { lat: lat, lng: lon };
+                } else if (selectedBtn === 4 && button4Position === null) {
+                    button4Position = { lat: lat, lng: lon };
+                }
+
+                firebase.database().ref(`/drone${selectedBtn}/obj${count}`).set({
+                    lat: lat,
+                    lng: lon
+                });
+
+                // Calculate and display distance between the selected points
+                if (prevLat !== 0 && prevLon !== 0) {
+                    const distance = calculateDistance(prevLat, prevLon, lat, lon);
+
+                    if (selectedBtn === 2) {
+                        totalDistanceToButton2 += distance;
+                        firebase.database().ref('/drone2/distance Btn1 to Btn2').set(totalDistanceToButton2.toFixed(2));
+                    } else if (selectedBtn === 3) {
+                        totalDistanceToButton3 += distance;
+                        firebase.database().ref('/drone3/distance Btn1 to Btn3').set(totalDistanceToButton3.toFixed(2));
+                    } else if (selectedBtn === 4) {
+                        totalDistanceToButton4 += distance;
+                        firebase.database().ref('/drone4/distance Btn1 to Btn4').set(totalDistanceToButton4.toFixed(2));
+                    }
+
+                    // Update the content of the distance-info div with the calculated distance
+                    const distanceInfoDiv = document.getElementById('distance-info');
+                    distanceInfoDiv.innerHTML = `<strong>Total Distances:</strong><br>`;
+                    distanceInfoDiv.innerHTML += `Button 1 to Button 2: ${totalDistanceToButton2.toFixed(2)} km<br>`;
+                    distanceInfoDiv.innerHTML += `Button 1 to Button 3: ${totalDistanceToButton3.toFixed(2)} km<br>`;
+                    distanceInfoDiv.innerHTML += `Button 1 to Button 4: ${totalDistanceToButton4.toFixed(2)} km<br>`;
+                }
+
+                const lineColor = ['black', 'red', 'purple', 'green'][selectedBtn - 1];
+
+                const buttonText = document.querySelector(`button[name="button${selectedBtn}"]`).textContent;
+                drawPolyline(button1Position.lat, button1Position.lng, lat, lon, lineColor, buttonText);
+
+                const polyline = new google.maps.Polyline({
+                    path: [
+                        { lat: button1Position.lat, lng: button1Position.lng },
+                        { lat: lat, lng: lon },
+                    ],
+                    strokeColor: lineColor,
+                    strokeOpacity: 1.0,
+                    strokeWeight: 2,
+                    map: mymap,
+                });
+            }
+            // Update prevLat and prevLon for the next button click
+            prevLat = lat;
+            prevLon = lon;
+        }
+
+        function degreesToRadians(degrees) {
+            return degrees * (Math.PI / 180);
+        }
+
+        function updateDistanceInfo() {
+            const distanceList = document.getElementById('distance-info');
+            distanceList.innerHTML = '';
+
+            if (button1Position && button2Position) {
+                const distance1To2 = calculateDistance(button1Position.lat, button1Position.lng, button2Position.lat, button2Position.lng);
+                let info = '<strong>Distances:</strong><br>';
+                info += `<span style="color:${getColor(2)}">Button 1 to Button 2: ${distance1To2.toFixed(2)} km</span><br>`;
+                distanceList.innerHTML = info;
+
+                drawPolyline(button1Position.lat, button1Position.lng, button2Position.lat, button2Position.lng, 'red');
+            }
+
+            if (button1Position && button3Position) {
+                const distance1To3 = calculateDistance(button1Position.lat, button1Position.lng, button3Position.lat, button3Position.lng);
+                let info = '<strong>Distances:</strong><br>';
+                info += `<span style="color:${getColor(3)}">Button 1 to Button 3: ${distance1To3.toFixed(2)} km</span><br>`;
+                distanceList.innerHTML += info;
+
+                drawPolyline(button1Position.lat, button1Position.lng, button3Position.lat, button3Position.lng, 'purple');
+            }
+
+            if (button1Position && button4Position) {
+                const distance1To4 = calculateDistance(button1Position.lat, button1Position.lng, button4Position.lat, button4Position.lng);
+                let info = '<strong>Distances:</strong><br>';
+                info += `<span style="color:${getColor(4)}">Button 1 to Button 4: ${distance1To4.toFixed(2)} km</span><br>`;
+                distanceList.innerHTML += info;
+
+                drawPolyline(button1Position.lat, button1Position.lng, button4Position.lat, button4Position.lng, 'green');
+            }
+        }
+
+        function getColor(buttonNumber) {
+            return ['black', 'red', 'purple', 'green'][buttonNumber - 1];
+        }
+
+        function drawPolyline(refLat, refLon, lat, lon, lineColor, buttonText) {
+        const lineCoordinates = [
+            { lat: refLat, lng: refLon },
+            { lat: lat, lng: lon },
+        ];
+
+        // Set the button background color to match the line color
+        const buttonElement = document.querySelector(`button[name="button${selectedBtn}"]`);
+            if (buttonElement) {
+                buttonElement.style.backgroundColor = lineColor;
+            }
+
+        const polyline = new google.maps.Polyline({
+            path: lineCoordinates,
+            strokeColor: lineColor,
+            strokeOpacity: 1.0,
+            strokeWeight: 2,
+            map: mymap,
+        });
+
+        // Calculate the mid-point of the line to place the button name
+        const midLat = (refLat + lat) / 2;
+        const midLon = (refLon + lon) / 2;
+
+        const label = new google.maps.InfoWindow({
+            content: buttonText,
+        });
+
+        label.setPosition({ lat: midLat, lng: midLon });
+
+        polyline.addListener('mouseover', function () {
+            label.open(mymap);
+        });
+
+        polyline.addListener('mouseout', function () {
+            label.close();
+        });
+
+        // Create a div element for the button name
+        const buttonNameDiv = document.createElement('div');
+        buttonNameDiv.className = 'button-name';
+        buttonNameDiv.textContent = buttonText;
+
+        // Add the div to the map
+        mymap.controls[google.maps.ControlPosition.TOP_CENTER].push(buttonNameDiv);
+
+        // Position the button name div on the line
+        const projection = mymap.getProjection();
+        if (projection) {
+            const startPoint = projection.fromLatLngToPoint(new google.maps.LatLng(refLat, refLon));
+            const endPoint = projection.fromLatLngToPoint(new google.maps.LatLng(lat, lon));
+            const midPoint = new google.maps.Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
+            const midLatLng = projection.fromPointToLatLng(midPoint);
+            buttonNameDiv.style.left = midPoint.x + 'px';
+            buttonNameDiv.style.top = midPoint.y + 'px';
+        }
+    }
+
+    function initMap() {
+        var map_center = { lat: 0, lng: 0 };
+        mymap = new google.maps.Map(document.getElementById('map'), {
+            zoom: 10,
+            center: map_center,
+        });
+
+        mymap.addListener('click', (event) => {
+            if (obj_detected) {
+                var lat = event.latLng.lat();
+                var lon = event.latLng.lng();
+                update_firebase(lat, lon);
+            }
+        });
+    }
+        
+    </script>
+    <script async defer src=" <your placemap api link> "></script>
+</body>
+</html>
